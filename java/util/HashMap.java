@@ -1302,7 +1302,7 @@ public class HashMap<K,V> extends AbstractMap<K,V>
      * 如果这个 k 在 mao 里存在且不为 null ,则 用 remappingFunction 对 原来的 value 和 v 做处理,处理的结果放回去
      * @param key key
      * @param value v
-     * @param remappingFunction  处理方式
+     * @param remappingFunction  处理方式 这的 remappingFunction 三个参数类型都是一直的
      * @return
      */
     @Override
@@ -1319,11 +1319,16 @@ public class HashMap<K,V> extends AbstractMap<K,V>
         Node<K,V> old = null;
         if (size > threshold || (tab = table) == null ||
             (n = tab.length) == 0)
+            //针对3种情况先做 resize() 操作,因为merge 不会影响元素总数的变化
+            //所以这里可以先 resize 再操作
             n = (tab = resize()).length;
         if ((first = tab[i = (n - 1) & hash]) != null) {
+            //找到了 hash 相同的
             if (first instanceof TreeNode)
+                //红黑数操作获找到想要 merge 的 key
                 old = (t = (TreeNode<K,V>)first).getTreeNode(hash, key);
             else {
+                //链表操作
                 Node<K,V> e = first; K k;
                 do {
                     if (e.hash == hash &&
@@ -1336,20 +1341,28 @@ public class HashMap<K,V> extends AbstractMap<K,V>
             }
         }
         if (old != null) {
+            //找到的请款要对旧数和新数做 remappingFunction.apply 操作
+            //如果 old 的 value 本身就是 null 直接替换即可
             V v;
             if (old.value != null)
                 v = remappingFunction.apply(old.value, value);
             else
                 v = value;
             if (v != null) {
+                //将 remappingFunction 结果替换原来的对象
                 old.value = v;
                 afterNodeAccess(old);
             }
             else
+                //如果 remappingFunction 的结果是 null  则删除该节点
                 removeNode(hash, key, null, false, true);
             return v;
         }
         if (value != null) {
+            //这种请款 就似乎 old == null 的情况了
+            //这样直接 put 进去旧好了
+            //并且这种情况就会影响 map 元素数量的变化,相应的操作也需要完成
+            //包括数量增加导致需要变成红黑树的情况
             if (t != null)
                 t.putTreeVal(this, tab, hash, key, value);
             else {
@@ -1364,14 +1377,23 @@ public class HashMap<K,V> extends AbstractMap<K,V>
         return value;
     }
 
+    /**
+     * 循环遍历所有 map 中的数据,对每个数据进行 action.accept 操作
+     * @param action 操作函数
+     */
     @Override
     public void forEach(BiConsumer<? super K, ? super V> action) {
         Node<K,V>[] tab;
         if (action == null)
             throw new NullPointerException();
         if (size > 0 && (tab = table) != null) {
+            //再多线程的情况下,如果一个线程正在进行 forEach
+            //另一个线程对 map 进行的操作,导致了 modCount 的变化
+            //会抛出异常,毕竟 map 本是不安全的.
+            //但是这里只针对会影响 modCount 变化的操作,如果是 merge 操作,则有可能不会抛出异常
             int mc = modCount;
             for (int i = 0; i < tab.length; ++i) {
+                //这里很明显没有针对 红黑树做什么特殊操作,这里可以六个悬念,直接 e.next 能否将 对红黑树进行遍历
                 for (Node<K,V> e = tab[i]; e != null; e = e.next)
                     action.accept(e.key, e.value);
             }
@@ -1380,6 +1402,11 @@ public class HashMap<K,V> extends AbstractMap<K,V>
         }
     }
 
+    /**
+     * 该方法和 foreach 惊人的相似,唯一的区别旧在于
+     * 执行完函数方法后,会把函数的值替换掉原有的值
+     * @param function
+     */
     @Override
     public void replaceAll(BiFunction<? super K, ? super V, ? extends V> function) {
         Node<K,V>[] tab;
