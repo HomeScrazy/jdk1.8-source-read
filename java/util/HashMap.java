@@ -345,6 +345,8 @@ public class HashMap<K,V> extends AbstractMap<K,V>
      */
     static final int hash(Object key) {
         int h;
+        //hash 值这里做了和自己 高位 16 位做 ^ 操作的做法,目的是为了 hash 更均匀
+        //主要是不浪费高位的 16 位 选择 ^ 是因为 & 结果偏向于 0 而 | 结果偏向于 1
         return (key == null) ? 0 : (h = key.hashCode()) ^ (h >>> 16);
     }
 
@@ -578,13 +580,18 @@ public class HashMap<K,V> extends AbstractMap<K,V>
         Node<K,V>[] tab; Node<K,V> first, e; int n; K k;
         if ((tab = table) != null && (n = tab.length) > 0 &&
             (first = tab[(n - 1) & hash]) != null) {
+            // table 不为空 且 key 对应的 hash 槽位置是有数据的
             if (first.hash == hash && // always check first node
                 ((k = first.key) == key || (key != null && key.equals(k))))
+                //如果 hash 槽存储的 Node 第一个节点就是想要找的数据
                 return first;
             if ((e = first.next) != null) {
+                //如果不是的话循环遍历,查询数据
                 if (first instanceof TreeNode)
+                    //红黑树循环遍历
                     return ((TreeNode<K,V>)first).getTreeNode(hash, key);
                 do {
+                    //普通链表循环遍历
                     if (e.hash == hash &&
                         ((k = e.key) == key || (key != null && key.equals(k))))
                         return e;
@@ -632,36 +639,63 @@ public class HashMap<K,V> extends AbstractMap<K,V>
      * @param evict if false, the table is in creation mode.
      * @return previous value, or null if none
      */
+    /*
+     * put 方法，容器的初始话，并不是在构造方法里实现的，而是在 put 第一个值的时候实现了。
+     * 初始话的方法就是使用 resize()
+     * 当 put 一个新的值的时候，引起整个 map 数据结构的变化
+     * 1. hash 槽 null - > 单节点
+     * 2. 单节点 -> 链表 （hash 冲突)
+     * 3. 链表 -> 红黑树 （链表 长度 >=8)
+     *
+     */
     final V putVal(int hash, K key, V value, boolean onlyIfAbsent,
                    boolean evict) {
         Node<K,V>[] tab; Node<K,V> p; int n, i;
         if ((tab = table) == null || (n = tab.length) == 0)
+            //如果还没有初始化，就先通过 resize 初始化
             n = (tab = resize()).length;
         if ((p = tab[i = (n - 1) & hash]) == null)
+            //如果想要放入的 hash 槽此时是空的，则新建一个 Node 节点放入
             tab[i] = newNode(hash, key, value, null);
         else {
             Node<K,V> e; K k;
             if (p.hash == hash &&
                 ((k = p.key) == key || (key != null && key.equals(k))))
+                //传入的 key 不仅 hash 冲突了，而且 equals 也是 true
                 e = p;
             else if (p instanceof TreeNode)
+                //如果 p 是 红黑树
+                //则用红黑树的形式放入
+                // * TreeNode 是 Node  子类的子类
                 e = ((TreeNode<K,V>)p).putTreeVal(this, tab, hash, key, value);
             else {
+                //剩下的情况，就是 p 是一个普通链表的情况
                 for (int binCount = 0; ; ++binCount) {
+                    //binCount 是用来计数的，如果 >= 7 (因为是从 0 开始算的 实际上 是 8 个元素的时候)时
+                    //转成红黑树
                     if ((e = p.next) == null) {
+                        //这边时找到了链表尾部的情况,直接插入到链表尾部即可
                         p.next = newNode(hash, key, value, null);
                         if (binCount >= TREEIFY_THRESHOLD - 1) // -1 for 1st
                             treeifyBin(tab, hash);
                         break;
                     }
+
                     if (e.hash == hash &&
                         ((k = e.key) == key || (key != null && key.equals(k))))
                         break;
+                    //这边时找到了一摸一样的,即 equals 是 true
                     p = e;
                 }
             }
+
+            // e != null 说明找到了 和 key equals 为 true的(hashcode 肯定是相等的)
             if (e != null) { // existing mapping for key
                 V oldValue = e.value;
+                //这种情况只有 onlyIfAbsent 不为 true 或者 oldValue 为空的情况下可以插入
+                //把旧的值变成新的值,同时返回旧的值
+                //也就是说,即便我们选择了 putIfAbsent 方法,但是如果同样的 key 对应的值 是 null 的话,还是会把 null 替换掉的
+                //而且这种情况,不会引起元素数量的变化,所以也不用做什么后续的操作
                 if (!onlyIfAbsent || oldValue == null)
                     e.value = value;
                 afterNodeAccess(e);
@@ -669,8 +703,11 @@ public class HashMap<K,V> extends AbstractMap<K,V>
             }
         }
         ++modCount;
+        // put 进去之后，看看现在存放元素的数量是否 > threshold
+        // 如果是，则进行扩容操作
         if (++size > threshold)
             resize();
+        //插入数据的后续操作
         afterNodeInsertion(evict);
         return null;
     }
@@ -1098,6 +1135,7 @@ public class HashMap<K,V> extends AbstractMap<K,V>
 
     @Override
     public V putIfAbsent(K key, V value) {
+        //只有 key 在 map 中 不存在的情况下,才 put 值进去
         return putVal(hash(key), key, value, true, true);
     }
 
@@ -1257,6 +1295,16 @@ public class HashMap<K,V> extends AbstractMap<K,V>
         return v;
     }
 
+    /**
+     * merge 的核心逻辑是
+     * merge 一个 k v 到 map里
+     * 如果 这个 k 在 map 里不存在,直接 put 进去 如果说存在但是对应的 value 是 null,则用 v 代替 null
+     * 如果这个 k 在 mao 里存在且不为 null ,则 用 remappingFunction 对 原来的 value 和 v 做处理,处理的结果放回去
+     * @param key key
+     * @param value v
+     * @param remappingFunction  处理方式
+     * @return
+     */
     @Override
     public V merge(K key, V value,
                    BiFunction<? super V, ? super V, ? extends V> remappingFunction) {
