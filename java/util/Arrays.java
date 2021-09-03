@@ -1430,6 +1430,7 @@ public class Arrays {
      */
     public static <T> void sort(T[] a, Comparator<? super T> c) {
         if (c == null) {
+            //没有比较器
             sort(a);
         } else {
             if (LegacyMergeSort.userRequested)
