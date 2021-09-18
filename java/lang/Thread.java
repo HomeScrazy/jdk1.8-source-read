@@ -369,10 +369,15 @@ class Thread implements Runnable {
             throw new NullPointerException("name cannot be null");
         }
 
+        // name 的 默认 名称 "Thread-" + nextThreadNum()
         this.name = name;
 
+        //获取当前线程，注意我们肯定是在一个线程 比如 main 线程里创建了一个线程的。
+        //那么main 线程就是我们创建的线程的父线程
         Thread parent = currentThread();
+        //SecurityManager 是一个需要单独去说的类，作用是安全策略
         SecurityManager security = System.getSecurityManager();
+        //设置线程组
         if (g == null) {
             /* Determine if it's an applet or not */
 
@@ -405,6 +410,7 @@ class Thread implements Runnable {
         g.addUnstarted();
 
         this.group = g;
+        //daemon priority 默认是和父线程相同的
         this.daemon = parent.isDaemon();
         this.priority = parent.getPriority();
         if (security == null || isCCLOverridden(parent.getClass()))
@@ -414,7 +420,9 @@ class Thread implements Runnable {
         this.inheritedAccessControlContext =
                 acc != null ? acc : AccessController.getContext();
         this.target = target;
+        //为什么还要调用一次 setPriority 呢？
         setPriority(priority);
+        //将父线程的 inheritableThreadLocals 里存放的数据继承过来
         if (inheritThreadLocals && parent.inheritableThreadLocals != null)
             this.inheritableThreadLocals =
                 ThreadLocal.createInheritedMap(parent.inheritableThreadLocals);

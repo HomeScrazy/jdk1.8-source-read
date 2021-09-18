@@ -582,11 +582,17 @@ public abstract class AbstractQueuedSynchronizer
      */
     private Node enq(final Node node) {
         for (;;) {
+            //不断的循环，然后通过 CAS 的方式去将自己添加到队列的尾巴上
+            //也就说是一定要加进去的，甚至没有超时机制
             Node t = tail;
             if (t == null) { // Must initialize
+                //队列还是空，进行一次初始化操作
                 if (compareAndSetHead(new Node()))
                     tail = head;
             } else {
+                //如果队列不为空，即便第一次进入循环的收是空，第二次进来肯定也不为空了
+                //尝试将 node 放到当前的 tail 上
+                //如果其它线程向插入了一个 node tail 变了会导致 CAS 失败
                 node.prev = t;
                 if (compareAndSetTail(t, node)) {
                     t.next = node;
@@ -607,12 +613,16 @@ public abstract class AbstractQueuedSynchronizer
         // Try the fast path of enq; backup to full enq on failure
         Node pred = tail;
         if (pred != null) {
+            //这边尝试做一次快速的入队操作，在 java 设计者眼里大多数情况应该是可以直接添加进去的
+            //这样能提升效率
             node.prev = pred;
             if (compareAndSetTail(pred, node)) {
+                //快速插入成功，直接返回
                 pred.next = node;
                 return node;
             }
         }
+        //快如插入失败 调用 enq
         enq(node);
         return node;
     }
@@ -859,18 +869,26 @@ public abstract class AbstractQueuedSynchronizer
         try {
             boolean interrupted = false;
             for (;;) {
+                //这里是一个循环
+                //获取 node 的前一个节点
                 final Node p = node.predecessor();
                 if (p == head && tryAcquire(arg)) {
+                    //如果 前一个节点是 head 并且 能够获取到锁
+                    //这个判断条件配合上面的无线循环来看，似乎如果 head 的下一个节点会一致尝试去获取锁
+                    //就把当前的Node 设置为 Head
                     setHead(node);
+                    //原来的头节点相当于从队列中出去了
                     p.next = null; // help GC
                     failed = false;
                     return interrupted;
                 }
+                //判断是应该 park node ,如果应该，则 park
                 if (shouldParkAfterFailedAcquire(p, node) &&
                     parkAndCheckInterrupt())
                     interrupted = true;
             }
         } finally {
+            //如果最终结果是失败的，取消这次 acquire 操作
             if (failed)
                 cancelAcquire(node);
         }
@@ -1195,6 +1213,7 @@ public abstract class AbstractQueuedSynchronizer
      *        can represent anything you like.
      */
     public final void acquire(int arg) {
+        //尝试获取锁，如果获取失败就放入队列中
         if (!tryAcquire(arg) &&
             acquireQueued(addWaiter(Node.EXCLUSIVE), arg))
             selfInterrupt();

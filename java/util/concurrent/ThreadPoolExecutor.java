@@ -901,6 +901,7 @@ public class ThreadPoolExecutor extends AbstractExecutorService {
     private boolean addWorker(Runnable firstTask, boolean core) {
         retry:
         for (;;) {
+            //状态判定
             int c = ctl.get();
             int rs = runStateOf(c);
 
@@ -909,6 +910,7 @@ public class ThreadPoolExecutor extends AbstractExecutorService {
                 ! (rs == SHUTDOWN &&
                    firstTask == null &&
                    ! workQueue.isEmpty()))
+                //不能添加的状态
                 return false;
 
             for (;;) {
@@ -919,6 +921,7 @@ public class ThreadPoolExecutor extends AbstractExecutorService {
                 if (compareAndIncrementWorkerCount(c))
                     break retry;
                 c = ctl.get();  // Re-read ctl
+                //最后查看下装填有没有变
                 if (runStateOf(c) != rs)
                     continue retry;
                 // else CAS failed due to workerCount change; retry inner loop
@@ -953,12 +956,14 @@ public class ThreadPoolExecutor extends AbstractExecutorService {
                 } finally {
                     mainLock.unlock();
                 }
+                //添加成功，直接开始任务
                 if (workerAdded) {
                     t.start();
                     workerStarted = true;
                 }
             }
         } finally {
+            //任务没有开始，添加失败的情况。
             if (! workerStarted)
                 addWorkerFailed(w);
         }
@@ -1362,19 +1367,29 @@ public class ThreadPoolExecutor extends AbstractExecutorService {
          * thread.  If it fails, we know we are shut down or saturated
          * and so reject the task.
          */
+        //获取 ctl 信息
         int c = ctl.get();
         if (workerCountOf(c) < corePoolSize) {
+            //判断当前任务数是否 < corePoolSize 如果时，添加任务
             if (addWorker(command, true))
+                //如果能添加陈工就直接返回
                 return;
+            //没添加成功，再次获取 ctl
             c = ctl.get();
         }
+        //这是上面没有添加成功的情况
         if (isRunning(c) && workQueue.offer(command)) {
+            //判断状态是否时 工作状态，如果时，就尝试放到工作队列里
+            //如果成功了，对 状态再一次做检查
             int recheck = ctl.get();
             if (! isRunning(recheck) && remove(command))
+                //状态 不是 RUNNING 了，则移除掉刚才添加的任务
                 reject(command);
             else if (workerCountOf(recheck) == 0)
+                //状态时 RUNNING 但是已经没有任务了，
                 addWorker(null, false);
         }
+        //往工作队列里添加失败，直接添加任务
         else if (!addWorker(command, false))
             reject(command);
     }

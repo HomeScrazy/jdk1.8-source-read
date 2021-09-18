@@ -2002,13 +2002,19 @@ public class HashMap<K,V> extends AbstractMap<K,V>
                 int index = (n - 1) & root.hash;
                 TreeNode<K,V> first = (TreeNode<K,V>)tab[index];
                 if (root != first) {
+                    //只有 root 不是 first 的情况才需要去挪动
                     Node<K,V> rn;
+                    //hash 槽第一个节点直接设置成 root
                     tab[index] = root;
                     TreeNode<K,V> rp = root.prev;
+
+                    //将 root 原来的 prev he  next 连接(抽离出 root 自己）
                     if ((rn = root.next) != null)
                         ((TreeNode<K,V>)rn).prev = rp;
                     if (rp != null)
                         rp.next = rn;
+
+                    //将 fist 接到 root 后面
                     if (first != null)
                         first.prev = root;
                     root.next = first;
@@ -2023,9 +2029,15 @@ public class HashMap<K,V> extends AbstractMap<K,V>
          * The kc argument caches comparableClassFor(key) upon first use
          * comparing keys.
          */
+
+        /*
+         * 红黑树的查找操作
+         */
         final TreeNode<K,V> find(int h, Object k, Class<?> kc) {
             TreeNode<K,V> p = this;
             do {
+                //dir 用来记录比较大小的记过
+
                 int ph, dir; K pk;
                 TreeNode<K,V> pl = p.left, pr = p.right, q;
                 if ((ph = p.hash) > h)
@@ -2364,36 +2376,54 @@ public class HashMap<K,V> extends AbstractMap<K,V>
         /* ------------------------------------------------------------ */
         // Red-black tree methods, all adapted from CLR
 
+        // 这里的 root 是红黑树的根节点 p 是旋转点
         static <K,V> TreeNode<K,V> rotateLeft(TreeNode<K,V> root,
                                               TreeNode<K,V> p) {
 
             //这里的 p 就是旋转点
             TreeNode<K,V> r, pp, rl;
             if (p != null && (r = p.right) != null) {
-                //
+                //p 不等于 null 并且 p 的右子节点不为 null (毕竟要左旋吗，右边肯定不为null)
+                //用 r 记录 p 的右子节点
                 if ((rl = p.right = r.left) != null)
+                    //这里讲 p 的 right 节点指向了 r 的 left 节点
+                    //如果 r 的 left 节点 rl 不为 null 把 rl 的 parent 节点指向 p
                     rl.parent = p;
                 if ((pp = r.parent = p.parent) == null)
+                    //讲 r 的 parent 指向 p 的 parent 节点
+                    //如果 pp 是 null 的化，说明 p 就是 根节点了，这个时候根节点要变成 r
                     (root = r).red = false;
                 else if (pp.left == p)
+                    //如果不是根节点化 就向 r 变成 pp 的子节点（是左是右看 p,和 p 一样就行,这里相当于取代了 p 成为 pp 的子节点)
                     pp.left = r;
                 else
                     pp.right = r;
+
+                // p 变成了 r 的左子节点
                 r.left = p;
                 p.parent = r;
             }
             return root;
         }
 
+        /*
+         *  root 是根节点。p 是旋转的节点
+         */
         static <K,V> TreeNode<K,V> rotateRight(TreeNode<K,V> root,
                                                TreeNode<K,V> p) {
             TreeNode<K,V> l, pp, lr;
             if (p != null && (l = p.left) != null) {
+                // p 以及 p 的左节点不为 null
+                //用 l 保存 p 的左节点
                 if ((lr = p.left = l.right) != null)
+                    // p 的 left 指向 l 的右节点 lr
+                    //如果 lr 不是 null 的话 将其 parent 节点指向 p
                     lr.parent = p;
                 if ((pp = l.parent = p.parent) == null)
+                    //将 l 的 父节点 指向 p 的父节点
                     (root = l).red = false;
                 else if (pp.right == p)
+                    //这里一操作 l 就代替了原来的 p 的位置了
                     pp.right = l;
                 else
                     pp.left = l;
@@ -2423,10 +2453,10 @@ public class HashMap<K,V> extends AbstractMap<K,V>
                     return x;
                 }
                 else if (!xp.red || (xpp = xp.parent) == null)
-                    // xp 是 root 的情况
+                    // xp 是 root 的情况,或者 xp 是黑色的情况，就不要继续再平衡操作了
                     return root;
                 if (xp == (xppl = xpp.left)) {
-                    //需要注意的是，xpp 肯定是黑色的
+                    //需要注意的是，到这里，xp 肯定是红色 那么 xpp 肯定是黑色的
                     // xp 是 xpp 的左子节点 且 xp 是　red 的
                     if ((xppr = xpp.right) != null && xppr.red) {
                         // xppr 也是 red
@@ -2454,8 +2484,9 @@ public class HashMap<K,V> extends AbstractMap<K,V>
                              *
                              * 这种情况只要以 xp 为中心 变成
                              *
-                             *      xp
-                             *   x     xpp
+                             *      xpp
+                             *    x
+                             * xp
                              */
                             root = rotateLeft(root, x = xp);
                             xpp = (xp = x.parent) == null ? null : xp.parent;
