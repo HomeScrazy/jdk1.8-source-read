@@ -692,6 +692,9 @@ public class ThreadPoolExecutor extends AbstractExecutorService {
      * termination possible -- reducing worker count or removing tasks
      * from the queue during shutdown. The method is non-private to
      * allow access from ScheduledThreadPoolExecutor.
+     * 在下面两种情况下，将线程池的状态 status 转换成 TERMINATED
+     * 1. status == SHUTDOWN 并且工作队列和线程池是空的
+     * 2. status == STOP 并且线程池是空的
      */
     final void tryTerminate() {
         for (;;) {
