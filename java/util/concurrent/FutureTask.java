@@ -403,8 +403,11 @@ public class FutureTask<V> implements RunnableFuture<V> {
     private void finishCompletion() {
         // assert state > COMPLETING;
         for (WaitNode q; (q = waiters) != null;) {
+            //不断的取栈的头节点，然后判断是否不为空
+            //然后将 头部节点置成空
             if (UNSAFE.compareAndSwapObject(this, waitersOffset, q, null)) {
                 for (;;) {
+                    //内部循环所做的事情，就是将所有的等待 stack 里的所有 waitNode 的线程全部唤醒
                     Thread t = q.thread;
                     if (t != null) {
                         q.thread = null;
@@ -443,11 +446,16 @@ public class FutureTask<V> implements RunnableFuture<V> {
         WaitNode q = null;
         boolean queued = false;
         for (;;) {
+            //这种情况是，当前线程被其他线程给中断了。
             if (Thread.interrupted()) {
                 //如果当前线程的中断标记是 true
+                //出队
                 removeWaiter(q);
+                //抛出异常
                 throw new InterruptedException();
             }
+            //如果是正常的唤醒 unPark 方式唤醒
+            //此时如果状态是合适的话应该返回正常的结果了
             int s = state;
             if (s > COMPLETING) {
                 //状态符合要求后就可以返回结果了
@@ -459,6 +467,7 @@ public class FutureTask<V> implements RunnableFuture<V> {
             else if (s == COMPLETING) // cannot time out yet
                 //当前线程 yield ，需要注意的是，这个线程是当前调用 get 方法的线程
                 //而不是实际执行 callable 的线程，所以这里并不影响 callable 的执行
+                //yield 释放下 cpu 的运行权限
                 Thread.yield();
             else if (q == null)
                 //1. 第一次自旋的是后，要先创建一个 WaitNode，其中的 Thread 存放的就是当前线程
